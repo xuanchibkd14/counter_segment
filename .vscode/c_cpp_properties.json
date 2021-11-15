@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${default}",
+                "D:\\ESP32\\components\\**",
+                "D:\\ESP32\\components\\newlib\\platform_include\\**",
+                "${workspaceFolder}/main",
+                "${workspaceFolder}/components/button/include/**",
+                "${workspaceFolder}/components/hc595ic/include/**",
+                "${workspaceFolder}/components/timeout/include/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}

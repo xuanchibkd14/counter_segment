@@ -1,0 +1,32 @@
+{
+    "files.associations": {
+        "*.md": "markdown",
+        "freertos.h": "c",
+        "portable.h": "c",
+        "portmacro.h": "c",
+        "esp_newlib.h": "c",
+        "i2c.h": "c",
+        "hc595.h": "c",
+        "spi_master.h": "c",
+        "spi_common.h": "c",
+        "lldesc.h": "c",
+        "string.h": "c",
+        "stdio.h": "c",
+        "counter_fw.h": "c",
+        "esp_system.h": "c",
+        "esp_timer.h": "c",
+        "esp_sleep.h": "c",
+        "ets_sys.h": "c",
+        "encoder_sw.h": "c",
+        "timeout.h": "c",
+        "array": "c",
+        "string": "c",
+        "string_view": "c",
+        "ranges": "c",
+        "button.h": "c",
+        "gpio.h": "c",
+        "save_flash.h": "c",
+        "hc595ic.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "Disabled"
+}
