@@ -1,8 +1,10 @@
 # memnu display counter firmware
 
  ## normal
-    - display 5 digit from data counter
-    - led blink when counter increase
+    - display 5 digit from data counter - done
+    - led blink when counter increase - not done
+    - save data when powerdown -done
+    - create menuconfig
  ## menu
     - press encoder switch(encsw) to into menu
     - menu list:

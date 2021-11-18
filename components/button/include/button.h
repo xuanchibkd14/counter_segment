@@ -43,15 +43,12 @@ extern "C"
 #define BUTTON_MAX_BUFF 10
 #define BUTTON_FILTER 2
 #define BUTTON_HOLD_TIME_DF 1000
-#define BUTTON_MULTI_PRESS_TIME_DF 50
+#define BUTTON_MULTI_PRESS_TIME_DF 300
 
 #ifndef encoder_pin_sw
 #define encoder_pin_sw 21
 #endif
 
-#ifndef Input_cnt_pin
-#define Input_cnt_pin 32
-#endif
   /* ----------------------------------------------------------------------- */
 
 #define READ_BUTTON(__INDEX__) gpio_get_level(gpio_input_pin[__INDEX__])
@@ -67,7 +64,6 @@ extern "C"
   typedef enum
   {
     Encoder_sw = 0,
-    Input_counter,
 
     BUTTON_NUM,
     BUTTON_NOPRESS

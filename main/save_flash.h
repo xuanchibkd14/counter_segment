@@ -1,21 +1,4 @@
-/**
- ******************************************************************************
- * File Name          : RTC.h
- * Description        : This file provides code for the configuration
- *                      of the RTC instances.
- ******************************************************************************
- * @attention
- *
- * <h2><center>&copy; Copyright (c) 2020 STMicroelectronics.
- * All rights reserved.</center></h2>
- *
- * This software component is licensed by ST under Ultimate Liberty license
- * SLA0044, the "License"; You may not use this file except in compliance with
- * the License. You may obtain a copy of the License at:
- *                             www.st.com/SLA0044
- *
- ******************************************************************************
- */
+
 /* Define to prevent recursive inclusion -------------------------------------*/
 #ifndef __SAVE_FLASH_H
 #define __SAVE_FLASH_H
@@ -26,7 +9,8 @@ extern "C"
 
 /* Includes ------------------------------------------------------------------*/
 #include "esp_system.h"
-
+#define DEFAULT_VREF 1100 // Use adc2_vref_to_gpio() to obtain a better estimate
+#define NO_OF_SAMPLES 20  // Multisampling
   /* USER CODE BEGIN Includes */
   void save_flash(void);
   void load_flash(void);

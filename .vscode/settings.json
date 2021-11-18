@@ -26,7 +26,9 @@
         "button.h": "c",
         "gpio.h": "c",
         "save_flash.h": "c",
-        "hc595ic.h": "c"
+        "hc595ic.h": "c",
+        "nvs.h": "c",
+        "math.h": "c"
     },
     "C_Cpp.errorSquiggles": "Disabled"
 }

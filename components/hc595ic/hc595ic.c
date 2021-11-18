@@ -8,18 +8,7 @@
 // #include "timeout.h"
 // #include "encoder_sw.h"
 
-// uint8_t segment_number[10] = {
-//     0x6f, // 0
-//     0x0A, // 1
-//     0x57, // 2
-//     0x1F, // 3
-//     0x3A, // 4
-//     0x3d, // 5
-//     0x7d, // 6
-//     0x0b, // 7
-//     0x7f, // 8
-//     0x3f, // 9
-// };
+
 void hc595_init(void)
 {
     printf("init hc595 \r\n");
@@ -30,7 +19,6 @@ void hc595_init(void)
     hc595_gpio.pull_down_en = 0;
     hc595_gpio.pull_up_en = 0;
     gpio_config(&hc595_gpio);
-    // xTaskCreate(shiftregister_task, "shift register task", 2048, NULL, 10, NULL);
 }
 
 esp_err_t hc595_send_data(uint8_t *senddata, uint8_t numdata)

@@ -32,17 +32,48 @@ extern "C"
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 /* USER CODE BEGIN Includes */
-#define Input_cnt_pin 26
+#define Input_cnt_pin 4
+#define gpio_led 2
+#define Numofdigit 5
+#define led_on_stt_bit 5
+#define led_a_bit 6
+#define led_b_bit 7
+  enum _type_segment
+  {
+    digit_normal = 0,
+    digit_overload,
+    digit_pointer,
+    menu_mode_updown,
+    menu_auto_reload,
+    menu_buzzer,
+    menu_relay,
+    typesegment_num
+  };
+  typedef uint8_t type_seg_t;
 
+  enum _segment_character
+  {
+    seg_char_b = 0,
+    seg_char_c,
+    seg_char_d,
+    seg_char_n,
+    seg_char_l,
+    seg_char_r,
+    seg_char_t,
+    seg_char_u,
+    seg_char_y,
+    seg_char_num
+  };
+  typedef uint8_t segment_char_t;
   /* USER CODE END Includes */
   typedef struct __counter_typedef
   {
-    uint64_t number : 17; // 17 counter 0->99999
-    uint64_t point : 17;  // 34 point to counter > 0-> 9999
-    uint64_t mode : 1;    // 35 up/down
-    uint64_t reload : 1;  // 36 auto reload
-    uint64_t buzzer : 1;  // 37 on/off buzzer
-    uint64_t relay : 1;   // 38 on/off relay
+    uint64_t number : 17;  // 17 counter 0->99999
+    uint64_t pointer : 17; // 34 point to counter > 0-> 9999
+    uint64_t mode : 1;     // 35 up/down
+    uint64_t reload : 1;   // 36 auto reload
+    uint64_t buzzer : 1;   // 37 on/off buzzer
+    uint64_t relay : 1;    // 38 on/off relay
   } counter_t;
 
   void inc_conter(void);

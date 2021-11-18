@@ -19,9 +19,9 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "encoder_sw.h"
-#include "counter_fw.h"
 #include "driver/gpio.h"
 /* USER CODE BEGIN 0 */
+void IRAM_ATTR encoder_isr_handler(void *arg);
 encoder_t enc_data;
 esp_err_t encoder_init(void)
 {
@@ -46,7 +46,10 @@ esp_err_t encoder_init(void)
     gpio_config(&io_int);
 
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(encoder_pin_a, gpio_isr_handler, (void *)encoder_pin_a);
+    gpio_isr_handler_add(encoder_pin_a, encoder_isr_handler, (void *)encoder_pin_a);
+    encoder_set_cnt(0);
+    encoder_set_gain(1);
+    encoder_set_range(0, 99999);
     return ESP_OK;
 }
 esp_err_t encoder_task(void)
@@ -55,11 +58,11 @@ esp_err_t encoder_task(void)
     {
         if (gpio_get_level(encoder_pin_b) == 1)
         {
-            enc_data.encoder_counter--;
+            enc_data.encoder_counter = (enc_data.encoder_counter > enc_data.encoder_gain) ? enc_data.encoder_counter - enc_data.encoder_gain : enc_data.encoder_min;
         }
         else
         {
-            enc_data.encoder_counter++;
+            enc_data.encoder_counter = (enc_data.encoder_counter > (enc_data.encoder_max - enc_data.encoder_gain)) ? enc_data.encoder_max : enc_data.encoder_counter + enc_data.encoder_gain;
         }
     }
     return ESP_OK;
@@ -67,6 +70,35 @@ esp_err_t encoder_task(void)
 uint32_t encoder_get_data(void)
 {
     return enc_data.encoder_counter;
+}
+void IRAM_ATTR encoder_isr_handler(void *arg)
+{
+    uint32_t gpio_num = (uint32_t)arg;
+    if (gpio_num == encoder_pin_a)
+    {
+        encoder_task();
+    }
+}
+uint32_t encoder_get_cnt(void)
+{
+    return enc_data.encoder_counter;
+}
+void encoder_set_cnt(uint32_t num)
+{
+    enc_data.encoder_counter = num;
+}
+void encoder_set_gain(uint32_t gain)
+{
+    enc_data.encoder_gain = gain;
+}
+uint32_t encoder_get_gain(void)
+{
+    return enc_data.encoder_gain;
+}
+void encoder_set_range(uint32_t min, uint32_t max)
+{
+    enc_data.encoder_min = min;
+    enc_data.encoder_max = max;
 }
 /* USER CODE END 0 */
 

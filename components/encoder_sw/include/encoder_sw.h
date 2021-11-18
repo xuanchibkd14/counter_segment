@@ -34,12 +34,18 @@ extern "C"
   typedef struct _enc_typedef
   {
     uint32_t encoder_counter;
-    uint32_t encoder_sw_enabel;
+    uint32_t encoder_gain;
+    uint32_t encoder_min;
+    uint32_t encoder_max;
   } encoder_t;
 
   esp_err_t encoder_init(void);
   esp_err_t encoder_task(void);
-  uint32_t encoder_get_data(void);
+  uint32_t encoder_get_cnt(void);
+  uint32_t encoder_get_gain(void);
+  void encoder_set_cnt(uint32_t num);
+  void encoder_set_gain(uint32_t gain);
+  void encoder_set_range(uint32_t min, uint32_t max);
   /* USER CODE END Includes */
 
   /* USER CODE BEGIN Private defines */
