@@ -88,7 +88,8 @@ typedef struct
  * @{
  */
 static uint64_t gpio_input_pin[BUTTON_NUM] = {
-    encoder_pin_sw};
+    encoder_pin_sw,
+    boot_pin_sw};
 Button_TypeDef ButtonProcess;
 static bool _waitRelease[BUTTON_NUM];
 static TO_TypeDef HoldTO[BUTTON_NUM];
@@ -130,7 +131,7 @@ void BTN_Init(void)
   // interrupt of rising edge
   io_conf.intr_type = GPIO_INTR_DISABLE;
   uint64_t i = 1;
-  io_conf.pin_bit_mask = (i << encoder_pin_sw);
+  io_conf.pin_bit_mask = (i << encoder_pin_sw) || (1 << boot_pin_sw);
   // set as input mode
   io_conf.mode = GPIO_MODE_INPUT;
   // enable pull-up mode

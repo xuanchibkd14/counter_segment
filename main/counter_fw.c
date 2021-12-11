@@ -16,19 +16,42 @@
 #include "button.h"
 #include "hc595ic.h"
 #include "save_flash.h"
+#include "buzzer.h"
+#include "relay.h"
 
 counter_t counter_data = {
 	.number = 0,
 	.pointer = 500,
-	.mode = 0,
+	.mode = 1,
 	.reload = 1,
 	.relay = 1,
-	.buzzer = 1};
-
+	.buzzer = 1,
+	.buzzer_alarm = 0};
+uint8_t data_segment[Numofdigit];
+uint8_t reset_counter_hand;
+static TO_TypeDef to_segblink;
+static type_seg_t display_segment = digit_normal;
+void countertask(void);
+void counteroverload(void);
+static void set_start_cnt(void);
+static void set_stop_cnt(void);
+static void restart_cnt(void);
+static bool led_stt = 1, ledred = 0, ledblue = 1, segblink;
+static void (*btnprocess)(void);
+static void (*counterprocess)(void);
+static void btn_normal(void);
+static void btn_pointer(void);
+static void btn_menu(void);
+static void btn_overload(void);
+static void dipslay_menu(uint8_t menulist);
+static void set_data_menu(uint8_t datamenu);
 static void inputcounter_init(void);
 static void led_blink_init(void);
 static void shiftregister_task(void *args);
+static void buzzer_bip(void);
 void IRAM_ATTR input_isr_handler(void *arg);
+static void relay_on(void);
+static void relay_off(void);
 uint8_t segment_number[10] = {
 	0x6f, // 0
 	0x0A, // 1
@@ -42,19 +65,27 @@ uint8_t segment_number[10] = {
 	0x3f, // 9
 };
 uint8_t segment_char[] = {
+	0x7b, // A
 	0x7c, // b
-	0x54, // c
+	0x65, // c
 	0x5E, // d
+	0x75, // e
+	0x71, // f
+	0x64, // l
 	0x58, // n
-	0x60, // l
+	0x5C, // o
+	0x73, // p
 	0x50, // r
-	0x18, // t
+	0x3d, // s
+	0x61, // t
 	0x4c, // u
-	0x3A, // u
+	0x57, // z
 };
 uint8_t segment_off = 0x00;
-TO_TypeDef to_blink;
-
+static uint32_t counterfromISR = 0;
+counter_state_t autoreload, enable_cnt = 0;
+TO_TypeDef to_blink, to_led_run_stop, to_autoreset;
+uint8_t resetbyinput=0;
 void app_main(void)
 {
 	hc595_init();
@@ -65,6 +96,8 @@ void app_main(void)
 	led_blink_init();
 	inputcounter_init();
 	nvsflash_init();
+	buzzer_init();
+	relay_init();
 	if (counter_data.mode == 1 && counter_data.number == 0)
 	{
 		counter_data.number = counter_data.pointer;
@@ -106,61 +139,101 @@ static void inputcounter_init(void)
 void IRAM_ATTR input_isr_handler(void *arg)
 {
 	uint32_t gpio_num = (uint32_t)arg;
+	static uint32_t to_check_noise = 0;
 	if (gpio_get_level(gpio_num) == 0)
 	{
-		// counter up
-		if (counter_data.mode == 0)
+		if (TO_GetCurrentTime() - to_check_noise > 2) // 0.2ms
 		{
-			counter_data.number++;
-			if (counter_data.number > counter_data.pointer)
+			to_check_noise = TO_GetCurrentTime();
+			if (enable_cnt == counter_enable)
 			{
-				counter_data.number = (counter_data.reload == 1) ? 1 : counter_data.pointer;
+				/* counter up */
+				if (counter_data.mode == counter_up)
+				{
+					counter_data.number++;
+					if (counter_data.number == counter_data.pointer)
+					{
+						if (counter_data.reload == 0)
+							TO_Start(&to_autoreset, 5000);
+					}
+					else if (counter_data.number > counter_data.pointer)
+					{
+						counter_data.number = counter_data.pointer;
+						buzzer_bip();
+						if (counter_data.reload == 0)
+						{
+							resetbyinput = 1;
+							reset_counter();
+							
+						}
+					}
+				}
+				else
+				{
+					counter_data.number--;
+					if (counter_data.number == 0)
+					{
+						if (counter_data.reload == 0)
+							TO_Start(&to_autoreset, 5000);
+					}
+					else if (counter_data.number < 0)
+					{
+						counter_data.number = 0;
+						buzzer_bip();
+						if (counter_data.reload == 0)
+						{
+							resetbyinput = 1;
+							reset_counter();
+							
+						}
+					}
+				}
 			}
-		}
-		else
-		{
-			counter_data.number--;
-			if (counter_data.number == 0)
+			if (counter_data.buzzer_alarm == 1)
 			{
-				counter_data.number = (counter_data.reload == 1) ? counter_data.pointer : 0;
+				buzzer_bip();
 			}
 		}
 	}
 }
-uint8_t data_segment[Numofdigit];
-static TO_TypeDef to_segblink;
-static type_seg_t display_segment = digit_normal;
+static uint8_t cntled = 0;
 
-static bool led_stt = 1, leda = 1, ledb = 1, segblink;
-static void (*btn_process)(void);
-static void btn_normal(void);
-static void btn_pointer(void);
-static void btn_menu(void);
-static void dipslay_menu(uint8_t menulist);
-static void set_data_menu(uint8_t datamenu);
 static void shiftregister_task(void *args)
 {
 	static uint8_t data_send[Numof595];
-	static uint32_t temp = 0;
-
+	// static uint8_t led_blink_overload;
+	static TO_TypeDef to_led_stt;
+	TO_Start(&to_led_stt, 500);
 	TO_Start(&to_segblink, 500);
-	btn_process = &btn_normal;
+
+	btnprocess = &btn_normal;
+	counterprocess = &countertask;
+	if (counter_data.number == counter_data.pointer || counter_data.number == 0)
+	{
+		counter_data.number = (counter_data.mode == 1) ? 0 : counter_data.pointer;
+	}
+
 	while (1)
 	{
-		if (btn_process)
-			btn_process();
+		if (btnprocess)
+			btnprocess();
 		else
-			btn_process = &btn_normal;
-
+			btnprocess = &btn_normal;
+		if (counterprocess)
+		{
+			counterprocess();
+		}
+		else
+			counterprocess = &countertask;
 		dipslay_menu(display_segment);
+		led_stt = (counter_data.mode) ? 0 : 1;
 		for (uint8_t i = 0; i < 5; i++)
 		{
-			data_send[0] = 1 << i | leda << led_a_bit | ledb << led_b_bit | led_stt << led_on_stt_bit;
+			data_send[0] = 1 << i | ledred << led_red_bit | ledblue << led_blue_bit | led_stt << led_on_stt_bit;
 			data_send[1] = data_segment[i];
 			hc595_send_data(data_send, Numof595);
 			vTaskDelay(1 / portTICK_RATE_MS);
 		}
-		// BTN_Clear();
 	}
 }
 static void dipslay_menu(uint8_t menulist)
@@ -169,20 +242,20 @@ static void dipslay_menu(uint8_t menulist)
 	{
 	case menu_mode_updown:
 	{
-		data_segment[0] = segment_char[seg_char_c];
-		data_segment[1] = segment_char[seg_char_n];
-		data_segment[2] = segment_char[seg_char_t];
-		data_segment[3] = segment_off;
 		counter_data.mode = encoder_get_cnt();
-		data_segment[4] = (counter_data.mode == 0) ? segment_number[0] : segment_number[1];
+		data_segment[0] = segment_char[seg_char_c];
+		data_segment[1] = segment_char[seg_char_t];
+		data_segment[2] = segment_off;
+		data_segment[3] = (counter_data.mode == 0) ? segment_char[seg_char_d] : segment_char[seg_char_u];
+		data_segment[4] = (counter_data.mode == 0) ? segment_char[seg_char_o] : segment_char[seg_char_p];
 	}
 	break;
 	case menu_auto_reload:
 	{
 		data_segment[0] = segment_char[seg_char_r];
-		data_segment[1] = segment_char[seg_char_l];
-		data_segment[2] = segment_char[seg_char_d];
-		data_segment[3] = segment_off;
+		data_segment[1] = segment_char[seg_char_s];
+		data_segment[2] = segment_char[seg_char_e];
+		data_segment[3] = segment_char[seg_char_t];
 		counter_data.reload = encoder_get_cnt();
 		data_segment[4] = (counter_data.reload == 0) ? segment_number[0] : segment_number[1];
 	}
@@ -191,22 +264,41 @@ static void dipslay_menu(uint8_t menulist)
 	{
 		data_segment[0] = segment_char[seg_char_b];
 		data_segment[1] = segment_char[seg_char_u];
-		data_segment[2] = segment_off;
+		data_segment[2] = segment_char[seg_char_z];
 		data_segment[3] = segment_off;
 		counter_data.buzzer = encoder_get_cnt();
 		data_segment[4] = (counter_data.buzzer == 0) ? segment_number[0] : segment_number[1];
 	}
 	break;
+	case menu_buzzer_alarm:
+	{
+		data_segment[0] = segment_char[seg_char_b];
+		data_segment[1] = segment_char[seg_char_u];
+		data_segment[2] = segment_char[seg_char_a];
+		data_segment[3] = segment_char[seg_char_l];
+		;
+		counter_data.buzzer_alarm = encoder_get_cnt();
+		data_segment[4] = (counter_data.buzzer_alarm == 0) ? segment_number[0] : segment_number[1];
+	}
+	break;
 	case menu_relay:
 	{
 		data_segment[0] = segment_char[seg_char_r];
-		data_segment[1] = segment_char[seg_char_l];
-		data_segment[2] = segment_char[seg_char_y];
+		data_segment[1] = segment_char[seg_char_e];
+		data_segment[2] = segment_char[seg_char_l];
 		data_segment[3] = segment_off;
 		counter_data.relay = encoder_get_cnt();
 		data_segment[4] = (counter_data.relay == 0) ? segment_number[0] : segment_number[1];
 	}
 	break;
+	case menu_ofset:
+		data_segment[0] = segment_char[seg_char_o];
+		data_segment[1] = segment_char[seg_char_f];
+		data_segment[2] = segment_char[seg_char_s];
+		counter_data.ofset_counter = encoder_get_cnt();
+		data_segment[3] = (counter_data.ofset_counter > 9) ? segment_number[counter_data.ofset_counter / 10] : segment_off;
+		data_segment[4] = segment_number[counter_data.ofset_counter % 10];
+		break;
 	case digit_overload:
 
 	case digit_normal:
@@ -239,7 +331,11 @@ static void dipslay_menu(uint8_t menulist)
 	}
 	if (segblink && menulist >= menu_mode_updown)
 	{
-		data_segment[4] = 0;
+		data_segment[4] = segment_off;
+		if (menulist == menu_mode_updown || menulist == menu_ofset)
+		{
+			data_segment[3] = segment_off;
+		}
 	}
 }
 static void btn_normal(void)
@@ -247,35 +343,37 @@ static void btn_normal(void)
 	if (BTN_DetectPress(Encoder_sw))
 	{
 		BTN_ClearPress(Encoder_sw);
-		if (display_segment == digit_overload)
+		buzzer_bip();
+		if (enable_cnt)
 		{
-			display_segment = digit_normal;
-			printf("display normal \n");
+			set_stop_cnt();
 		}
 		else
-		{
-			printf("detect enc pressed but dont do anything\r\n");
-		}
+			set_start_cnt();
 	}
 	else if (BTN_Detect2Press(Encoder_sw))
 	{
 		BTN_Clear2Press(Encoder_sw);
+		set_stop_cnt();
 		encoder_set_cnt(counter_data.pointer);
+		buzzer_bip();
 		encoder_set_gain(1);
 		encoder_set_range(0, 99999);
 		display_segment = digit_pointer;
-		btn_process = &btn_pointer;
+		btnprocess = &btn_pointer;
 		printf("detect 2 press go to set pointer \r\n");
 	}
 	else if (BTN_DetectHold(Encoder_sw))
 	{
 		BTN_ClearHold(Encoder_sw);
+		set_stop_cnt();
 		display_segment = menu_mode_updown;
 		set_data_menu(display_segment);
 		encoder_set_gain(1);
 		encoder_set_range(0, 1);
-		btn_process = &btn_menu;
+		btnprocess = &btn_menu;
 		printf("detect hold \t goto menu config \r\n");
+		buzzer_bip();
 	}
 	else if (BTN_DetectRelease(Encoder_sw))
 	{
@@ -293,6 +391,7 @@ static void btn_pointer(void)
 			encoder_set_gain(1);
 
 		printf("detect press set gain %d \r\n", encoder_get_gain());
+		buzzer_bip();
 	}
 	else if (BTN_Detect2Press(Encoder_sw))
 	{
@@ -302,7 +401,9 @@ static void btn_pointer(void)
 	{
 		BTN_ClearHold(Encoder_sw);
 		display_segment = digit_normal;
-		btn_process = &btn_normal;
+		btnprocess = &btn_normal;
+		set_stop_cnt();
+		buzzer_bip();
 		save_flash();
 		printf("detect hold \t goto normal \r\n");
 	}
@@ -325,9 +426,10 @@ static void btn_menu(void)
 	if (BTN_DetectPress(Encoder_sw))
 	{
 		BTN_ClearPress(Encoder_sw);
-		display_segment = (display_segment == menu_relay) ? menu_mode_updown : display_segment + 1;
+		display_segment = (display_segment == menu_ofset) ? menu_mode_updown : display_segment + 1;
 		set_data_menu(display_segment);
 		printf("detect press go to menu %d \r\n", display_segment);
+		buzzer_bip();
 	}
 	else if (BTN_Detect2Press(Encoder_sw))
 	{
@@ -337,9 +439,10 @@ static void btn_menu(void)
 	{
 		BTN_ClearHold(Encoder_sw);
 		display_segment = digit_normal;
-		btn_process = &btn_normal;
+		btnprocess = &btn_normal;
 		save_flash();
 		printf("detect hold \t goto digit normal \r\n");
+		buzzer_bip();
 	}
 	else if (BTN_DetectRelease(Encoder_sw))
 	{
@@ -356,6 +459,7 @@ static void btn_menu(void)
 }
 static void set_data_menu(uint8_t datamenu)
 {
+	encoder_set_range(0, 1);
 	switch (datamenu)
 	{
 	case menu_mode_updown:
@@ -374,7 +478,188 @@ static void set_data_menu(uint8_t datamenu)
 		encoder_set_cnt(counter_data.relay);
 		printf(" relay %d\n", counter_data.relay);
 		break;
+	case menu_buzzer_alarm:
+		encoder_set_cnt(counter_data.buzzer_alarm);
+		printf("buzzer alarm %d\n", counter_data.buzzer_alarm);
+		break;
+	case menu_ofset:
+		encoder_set_range(0, 99);
+		encoder_set_cnt(counter_data.ofset_counter);
+		printf("ofset counter %d\n", counter_data.ofset_counter);
+		break;
 	default:
 		break;
 	}
 }
+static void buzzer_bip(void)
+{
+	if (counter_data.buzzer == 1)
+	{
+		buzzer_set_bip(buzzer_short);
+	}
+}
+static void relay_on(void)
+{
+	if (counter_data.relay == 0)
+	{
+		relay_set_state(0, 0);
+	}
+	else
+	{
+		relay_set_state(0, 1);
+	}
+}
+static void relay_off(void)
+{
+	if (counter_data.relay == 0)
+	{
+		relay_set_state(0, 1);
+	}
+	else
+	{
+		relay_set_state(0, 0);
+	}
+}
+static void set_start_cnt(void)
+{
+	enable_cnt = 1;
+	ledred = led_off;
+	ledblue = led_on;
+}
+static void set_stop_cnt(void)
+{
+	enable_cnt = 0;
+	ledred = led_on;
+	ledblue = led_off;
+}
+static void restart_cnt(void)
+{
+	autoreload = 0;
+	counter_data.number = (counter_data.mode == 1) ? 0 : counter_data.pointer;
+}
+static uint8_t buzzer_overload;
+void countertask(void)
+{
+	/* checking counter to overload */
+	static uint32_t warning_cnt;
+	if (counter_data.ofset_counter < counter_data.pointer && counter_data.ofset_counter != 0)
+	{
+		warning_cnt = (counter_data.mode == counter_up) ? counter_data.pointer - counter_data.ofset_counter : counter_data.ofset_counter;
+	}
+	else
+	{
+		warning_cnt = (counter_data.mode == counter_up) ? counter_data.pointer : 0;
+	}
+	if (counter_data.mode == counter_up)
+	{
+		if (counter_data.number >= warning_cnt)
+		{
+			// printf("alarm prepair to overload \r\n");
+			display_segment = digit_overload;
+			counterprocess = &counteroverload;
+			btnprocess = &btn_overload;
+			buzzer_overload = 1;
+		}
+	}
+	else
+	{
+		if (counter_data.number <= warning_cnt)
+		{
+			// printf("alarm prepair to overload \r\n");
+			display_segment = digit_overload;
+			counterprocess = &counteroverload;
+			btnprocess = &btn_overload;
+			buzzer_overload = 1;
+		}
+	}
+}
+
+void counteroverload(void)
+{
+	relay_on();
+	static TO_TypeDef _to_runtask;
+	static uint8_t _notFirstTime = 0;
+	if (_notFirstTime == 0)
+	{
+		_notFirstTime = 1;
+		TO_Start(&_to_runtask, 100);
+	}
+	if (TO_ReadStatus(&_to_runtask))
+	{
+		TO_ClearStatus(&_to_runtask);
+		TO_Start(&_to_runtask, 500);
+		if (display_segment == digit_overload || buzzer_overload == 1)
+		{
+			buzzer_bip();
+			ledred = !ledred;
+			ledblue = !ledblue;
+		}
+	}
+	TO_Task(&_to_runtask);
+	if (TO_ReadStatus(&to_autoreset))
+	{
+		TO_ClearStatus(&to_autoreset);
+		reset_counter();
+	}
+	TO_Task(&to_autoreset);
+}
+static void btn_overload(void)
+{
+	if (BTN_DetectPress(Encoder_sw))
+	{
+		BTN_ClearPress(Encoder_sw);
+		buzzer_overload = 0;
+		if ((counter_data.mode == counter_up && counter_data.number >= counter_data.pointer) || (counter_data.mode == counter_down && counter_data.number <= 0))
+		{
+			reset_counter();
+		}
+		else
+		{
+			if (enable_cnt)
+			{
+				set_stop_cnt();
+			}
+			else
+				set_start_cnt();
+		}
+		buzzer_bip();
+	}
+	else if (BTN_Detect2Press(Encoder_sw))
+	{
+		BTN_Clear2Press(Encoder_sw);
+		set_stop_cnt();
+		encoder_set_cnt(counter_data.pointer);
+		buzzer_bip();
+		encoder_set_gain(1);
+		encoder_set_range(0, 99999);
+		display_segment = digit_pointer;
+		btnprocess = &btn_pointer;
+		printf("detect 2 press go to set pointer \r\n");
+	}
+	else if (BTN_DetectHold(Encoder_sw))
+	{
+		BTN_ClearHold(Encoder_sw);
+		set_stop_cnt();
+		display_segment = menu_mode_updown;
+		set_data_menu(display_segment);
+		encoder_set_gain(1);
+		encoder_set_range(0, 1);
+		btnprocess = &btn_menu;
+		printf("detect hold \t goto menu config \r\n");
+		buzzer_bip();
+	}
+	else if (BTN_DetectRelease(Encoder_sw))
+	{
+		BTN_ClearRelease(Encoder_sw);
+	}
+}
+void reset_counter(void)
+{
+	counter_data.number = (counter_data.mode == counter_up) ? 0 + resetbyinput : counter_data.pointer - resetbyinput;
+	counterprocess = &countertask;
+	btnprocess = &btn_normal;
+	relay_off();
+	set_start_cnt();
+	resetbyinput = 0;
+}
+/*End of line ---------------------------------------- copywriting by chi luong 2021 -----------------------------------*/

@@ -48,7 +48,9 @@ extern "C"
 #ifndef encoder_pin_sw
 #define encoder_pin_sw 21
 #endif
-
+#ifndef boot_pin_sw
+#define boot_pin_sw 0
+#endif
   /* ----------------------------------------------------------------------- */
 
 #define READ_BUTTON(__INDEX__) gpio_get_level(gpio_input_pin[__INDEX__])
@@ -64,7 +66,7 @@ extern "C"
   typedef enum
   {
     Encoder_sw = 0,
-
+    Boot_sw,
     BUTTON_NUM,
     BUTTON_NOPRESS
   } BTN_EnumTypeDef;

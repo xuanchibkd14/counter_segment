@@ -36,44 +36,65 @@ extern "C"
 #define gpio_led 2
 #define Numofdigit 5
 #define led_on_stt_bit 5
-#define led_a_bit 6
-#define led_b_bit 7
+#define led_red_bit 6
+#define led_blue_bit 7
+#define led_on 0
+#define led_off 1
   enum _type_segment
   {
     digit_normal = 0,
     digit_overload,
     digit_pointer,
     menu_mode_updown,
-    menu_auto_reload,
     menu_buzzer,
+    menu_buzzer_alarm,
     menu_relay,
+    menu_auto_reload,
+    menu_ofset,
     typesegment_num
   };
   typedef uint8_t type_seg_t;
-
+  typedef enum __counter_mode
+  {
+    counter_down = 0,
+    counter_up
+  } counter_mode_t;
+  typedef enum __counter_state
+  {
+    counter_disable = 0,
+    counter_enable
+  } counter_state_t;
   enum _segment_character
   {
-    seg_char_b = 0,
+    seg_char_a = 0,
+    seg_char_b,
     seg_char_c,
     seg_char_d,
-    seg_char_n,
+    seg_char_e,
+    seg_char_f,
     seg_char_l,
+    seg_char_n,
+    seg_char_o,
+    seg_char_p,
     seg_char_r,
+    seg_char_s,
     seg_char_t,
     seg_char_u,
-    seg_char_y,
+    seg_char_z,
     seg_char_num
   };
   typedef uint8_t segment_char_t;
   /* USER CODE END Includes */
   typedef struct __counter_typedef
   {
-    uint64_t number : 17;  // 17 counter 0->99999
-    uint64_t pointer : 17; // 34 point to counter > 0-> 9999
-    uint64_t mode : 1;     // 35 up/down
-    uint64_t reload : 1;   // 36 auto reload
-    uint64_t buzzer : 1;   // 37 on/off buzzer
-    uint64_t relay : 1;    // 38 on/off relay
+    int32_t number;               // 17 counter 0->99999
+    uint32_t pointer;             // 34 point to counter > 0-> 9999
+    uint8_t ofset_counter;        // ofset to warning 0-99%
+    counter_mode_t mode;          // 35 up/down
+    counter_state_t reload;       // 36 auto reload
+    counter_state_t buzzer;       // 37 on/off buzzer
+    counter_state_t relay;        // 38 on/off relay
+    counter_state_t buzzer_alarm; // alarm buzzer
   } counter_t;
 
   void inc_conter(void);

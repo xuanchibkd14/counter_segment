@@ -10,7 +10,9 @@
                 "${workspaceFolder}/components/button/include/**",
                 "${workspaceFolder}/components/hc595ic/include/**",
                 "${workspaceFolder}/components/timeout/include/**",
-                "${workspaceFolder}/components/encoder_sw/include/**"
+                "${workspaceFolder}/components/encoder_sw/include/**",
+                "${workspaceFolder}/components/buzzer/include/**",
+                "${workspaceFolder}/components/relay/include/**"
             ],
             "defines": [
                 "_DEBUG",

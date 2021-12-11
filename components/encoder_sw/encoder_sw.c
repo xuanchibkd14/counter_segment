@@ -56,7 +56,7 @@ esp_err_t encoder_task(void)
 {
     if (gpio_get_level(encoder_pin_a) == 1)
     {
-        if (gpio_get_level(encoder_pin_b) == 1)
+        if (gpio_get_level(encoder_pin_b) == 0)
         {
             enc_data.encoder_counter = (enc_data.encoder_counter > enc_data.encoder_gain) ? enc_data.encoder_counter - enc_data.encoder_gain : enc_data.encoder_min;
         }

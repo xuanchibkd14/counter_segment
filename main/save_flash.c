@@ -20,6 +20,9 @@ static const adc_atten_t atten = ADC_ATTEN_DB_11;
 static const adc_unit_t unit = ADC_UNIT_2;
 static void adc_task(void *arg);
 extern counter_t counter_data;
+static float check_volt_input = 0;
+float volt_input_get(void);
+static TaskHandle_t adc_autosave;
 static void adc_task(void *arg)
 {
     // check_efuse();
@@ -32,27 +35,45 @@ static void adc_task(void *arg)
     esp_adc_cal_characterize(unit, atten, width, DEFAULT_VREF, adc_chars);
 
     // Continuously sample ADC1
+    for (uint8_t i = 0; i < 200; i++)
+    {
+        check_volt_input += volt_input_get();
+        vTaskDelay(50 / portTICK_RATE_MS);
+    }
+    check_volt_input /= 200;
+    if (check_volt_input < 3)
+    {
+        printf("debug mode \r\n");
+        vTaskDelete(adc_autosave);
+    }
+    else
+    {
+        printf("volt input is %2.0f\r\n", check_volt_input);
+    }
     while (1)
     {
-        uint32_t adc_reading = 0;
-        for (int i = 0; i < NO_OF_SAMPLES; i++)
-        {
-            int raw;
-            adc2_get_raw((adc2_channel_t)channel, width, &raw);
-            adc_reading += raw;
-        }
-        adc_reading /= NO_OF_SAMPLES;
-        // Convert adc_reading to voltage in mV
-        uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
-        float real_voltage = ((float)voltage / 1000) / 0.09;
+        uint8_t real_voltage = volt_input_get();
         if (real_voltage < 7)
         {
             save_flash();
             vTaskDelay(1000 / portTICK_RATE_MS);
         }
-
-        vTaskDelay(10 / portTICK_RATE_MS);
+        vTaskDelay(50 / portTICK_RATE_MS);
     }
+}
+float volt_input_get(void)
+{
+    uint32_t adc_reading = 0;
+    for (int i = 0; i < NO_OF_SAMPLES; i++)
+    {
+        int raw;
+        adc2_get_raw((adc2_channel_t)channel, width, &raw);
+        adc_reading += raw;
+    }
+    adc_reading /= NO_OF_SAMPLES;
+    // Convert adc_reading to voltage in mV
+    uint32_t voltage = esp_adc_cal_raw_to_voltage(adc_reading, adc_chars);
+    return ((float)voltage / 1000) / 0.09;
 }
 void nvsflash_init(void)
 {
@@ -65,7 +86,7 @@ void nvsflash_init(void)
     }
     ESP_ERROR_CHECK(err);
     load_flash();
-    xTaskCreate(adc_task, "adc check power", 2048, NULL, 10, NULL);
+    xTaskCreate(adc_task, "adc check power", 2048, NULL, 10, adc_autosave);
 }
 void save_flash(void)
 {
@@ -90,7 +111,11 @@ void save_flash(void)
         err = nvs_set_u32(my_handle, "savepointer", savepointer);
         printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 
-        uint8_t savemenu = counter_data.mode | counter_data.reload << 1 | counter_data.buzzer << 2 | counter_data.relay << 3;
+        uint8_t saveofsset = counter_data.ofset_counter;
+        err = nvs_set_u8(my_handle, "saveofset", saveofsset);
+        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+        uint8_t savemenu = counter_data.mode | counter_data.reload << 1 | counter_data.buzzer << 2 | counter_data.relay << 3 | counter_data.buzzer_alarm << 4;
         err = nvs_set_u8(my_handle, "savemenu", savemenu);
         printf((err != ESP_OK) ? "Failed!\n" : "Done 0x%x\n", savemenu);
         // Commit written value.
@@ -147,12 +172,18 @@ void load_flash(void)
         counter_data.pointer = savepointer;
         printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 
+        uint8_t saveofset = 0;
+        err = nvs_get_u8(my_handle, "saveofset", &saveofset);
+        counter_data.ofset_counter = saveofset;
+        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
         uint8_t savemenu = 0;
         err = nvs_get_u8(my_handle, "savemenu", &savemenu);
         counter_data.mode = savemenu & 1;
         counter_data.reload = (savemenu >> 1) & 1;
         counter_data.buzzer = (savemenu >> 2) & 1;
         counter_data.relay = (savemenu >> 3) & 1;
+        counter_data.buzzer_alarm = (savemenu >> 4) & 1;
         printf((err != ESP_OK) ? "Failed! \n" : "Done 0x%x\n", savemenu);
         // Close
         nvs_close(my_handle);
