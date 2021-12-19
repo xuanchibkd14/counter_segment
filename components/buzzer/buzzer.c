@@ -38,9 +38,9 @@ void buzzer_task(void *arvgs)
             break;
         case buzzer_long_repeat:
             BUZZER_ON;
-            vTaskDelay(500 / portTICK_RATE_MS);
+            vTaskDelay(100 / portTICK_RATE_MS);
             BUZZER_OFF;
-            vTaskDelay(500 / portTICK_RATE_MS);
+            vTaskDelay(100 / portTICK_RATE_MS);
             break;
         default:
             break;

@@ -85,7 +85,7 @@ uint8_t segment_off = 0x00;
 static uint32_t counterfromISR = 0;
 counter_state_t autoreload, enable_cnt = 0;
 TO_TypeDef to_blink, to_led_run_stop, to_autoreset;
-uint8_t resetbyinput=0;
+uint8_t resetbyinput = 0;
 void app_main(void)
 {
 	hc595_init();
@@ -153,6 +153,7 @@ void IRAM_ATTR input_isr_handler(void *arg)
 					counter_data.number++;
 					if (counter_data.number == counter_data.pointer)
 					{
+						relay_on();
 						if (counter_data.reload == 0)
 							TO_Start(&to_autoreset, 5000);
 					}
@@ -164,7 +165,6 @@ void IRAM_ATTR input_isr_handler(void *arg)
 						{
 							resetbyinput = 1;
 							reset_counter();
-							
 						}
 					}
 				}
@@ -178,13 +178,13 @@ void IRAM_ATTR input_isr_handler(void *arg)
 					}
 					else if (counter_data.number < 0)
 					{
+						relay_on();
 						counter_data.number = 0;
 						buzzer_bip();
 						if (counter_data.reload == 0)
 						{
 							resetbyinput = 1;
 							reset_counter();
-							
 						}
 					}
 				}
@@ -197,7 +197,7 @@ void IRAM_ATTR input_isr_handler(void *arg)
 	}
 }
 static uint8_t cntled = 0;
-
+uint8_t reset_cnt_by_cnt_mode;
 static void shiftregister_task(void *args)
 {
 	static uint8_t data_send[Numof595];
@@ -243,6 +243,11 @@ static void dipslay_menu(uint8_t menulist)
 	case menu_mode_updown:
 	{
 		counter_data.mode = encoder_get_cnt();
+		if (reset_cnt_by_cnt_mode != counter_data.mode)
+		{
+			counter_data.number = (counter_data.mode == 1) ? 0 : counter_data.pointer;
+		}
+
 		data_segment[0] = segment_char[seg_char_c];
 		data_segment[1] = segment_char[seg_char_t];
 		data_segment[2] = segment_off;
@@ -340,6 +345,7 @@ static void dipslay_menu(uint8_t menulist)
 }
 static void btn_normal(void)
 {
+	relay_off();
 	if (BTN_DetectPress(Encoder_sw))
 	{
 		BTN_ClearPress(Encoder_sw);
@@ -358,7 +364,7 @@ static void btn_normal(void)
 		encoder_set_cnt(counter_data.pointer);
 		buzzer_bip();
 		encoder_set_gain(1);
-		encoder_set_range(0, 99999);
+		encoder_set_range(1, 99999);
 		display_segment = digit_pointer;
 		btnprocess = &btn_pointer;
 		printf("detect 2 press go to set pointer \r\n");
@@ -383,6 +389,7 @@ static void btn_normal(void)
 }
 static void btn_pointer(void)
 {
+	enable_cnt = counter_disable;
 	if (BTN_DetectPress(Encoder_sw))
 	{
 		BTN_ClearPress(Encoder_sw);
@@ -405,6 +412,7 @@ static void btn_pointer(void)
 		set_stop_cnt();
 		buzzer_bip();
 		save_flash();
+		counter_data.number = (counter_data.mode == 1) ? 0 : counter_data.pointer;
 		printf("detect hold \t goto normal \r\n");
 	}
 	else if (BTN_DetectRelease(Encoder_sw))
@@ -423,6 +431,7 @@ static void btn_pointer(void)
 
 static void btn_menu(void)
 {
+	enable_cnt = counter_disable;
 	if (BTN_DetectPress(Encoder_sw))
 	{
 		BTN_ClearPress(Encoder_sw);
@@ -463,6 +472,7 @@ static void set_data_menu(uint8_t datamenu)
 	switch (datamenu)
 	{
 	case menu_mode_updown:
+		reset_cnt_by_cnt_mode = counter_data.mode;
 		encoder_set_cnt(counter_data.mode);
 		printf(" mode %d\n", counter_data.mode);
 		break;
@@ -502,22 +512,22 @@ static void relay_on(void)
 {
 	if (counter_data.relay == 0)
 	{
-		relay_set_state(0, 0);
+		relay_set_state(0, 1);
 	}
 	else
 	{
-		relay_set_state(0, 1);
+		relay_set_state(0, 0);
 	}
 }
 static void relay_off(void)
 {
 	if (counter_data.relay == 0)
 	{
-		relay_set_state(0, 1);
+		relay_set_state(0, 0);
 	}
 	else
 	{
-		relay_set_state(0, 0);
+		relay_set_state(0, 1);
 	}
 }
 static void set_start_cnt(void)
@@ -540,6 +550,11 @@ static void restart_cnt(void)
 static uint8_t buzzer_overload;
 void countertask(void)
 {
+	/* check menu/pointer setting */
+	if (display_segment >= digit_pointer)
+	{
+		return;
+	}
 	/* checking counter to overload */
 	static uint32_t warning_cnt;
 	if (counter_data.ofset_counter < counter_data.pointer && counter_data.ofset_counter != 0)
@@ -576,7 +591,6 @@ void countertask(void)
 
 void counteroverload(void)
 {
-	relay_on();
 	static TO_TypeDef _to_runtask;
 	static uint8_t _notFirstTime = 0;
 	if (_notFirstTime == 0)
@@ -590,7 +604,7 @@ void counteroverload(void)
 		TO_Start(&_to_runtask, 500);
 		if (display_segment == digit_overload || buzzer_overload == 1)
 		{
-			buzzer_bip();
+			buzzer_set_bip(buzzer_long_repeat);
 			ledred = !ledred;
 			ledblue = !ledblue;
 		}
@@ -659,6 +673,7 @@ void reset_counter(void)
 	counterprocess = &countertask;
 	btnprocess = &btn_normal;
 	relay_off();
+	buzzer_set_bip(buzzer_off);
 	set_start_cnt();
 	resetbyinput = 0;
 }
